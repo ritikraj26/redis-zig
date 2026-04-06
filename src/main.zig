@@ -14,6 +14,9 @@ pub fn main() !void {
         const connection = try listener.accept();
 
         try stdout.writeAll("accepted new connection");
+
+        // hardcoded response to the PING command
+        try connection.stream.writeAll("+PONG\r\n");
         connection.stream.close();
     }
 }
