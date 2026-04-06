@@ -15,8 +15,12 @@ pub fn main() !void {
 
         try stdout.writeAll("accepted new connection");
 
-        // hardcoded response to the PING command
-        try connection.stream.writeAll("+PONG\r\n");
+        var buf: [1024]u8 = undefined;
+        while (true) {
+            const n = connection.stream.read(&buf) catch break;
+            if (n == 0) break;
+            try connection.stream.writeAll("+PONG\r\n");
+        }
         connection.stream.close();
     }
 }
