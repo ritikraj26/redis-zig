@@ -10,3 +10,7 @@ pub const err_parse = "-ERR parse error\r\n";
 pub fn bulkString(out: []u8, s: []const u8) ?[]const u8 {
     return std.fmt.bufPrint(out, "${d}\r\n{s}\r\n", .{ s.len, s }) catch return null;
 }
+
+pub fn integer(out: []u8, n: usize) ?[]const u8 {
+    return std.fmt.bufPrint(out, ":{d}\r\n", .{n}) catch return null;
+}

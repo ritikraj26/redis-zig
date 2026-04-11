@@ -51,3 +51,39 @@ pub const Store = struct {
         try self.map.put(key_copy, Entry{ .value = val_copy, .expires_at_ms = expires_at_ms });
     }
 };
+
+pub const List = struct {
+    map: std.StringHashMap(std.ArrayList([]const u8)),
+    mutex: std.Thread.Mutex,
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator) List {
+        return .{
+            .map = std.StringHashMap(std.ArrayList([]const u8)).init(allocator),
+            .mutex = .{},
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *List) void {
+        var it = self.map.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.deinit(self.allocator);
+        }
+        self.map.deinit();
+    }
+
+    pub fn rpush(self: *List, key: []const u8, val: []const u8) !usize {
+        const val_copy = try self.allocator.dupe(u8, val);
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        const result = try self.map.getOrPut(key);
+        if (!result.found_existing) {
+            const key_copy = try self.allocator.dupe(u8, key);
+            result.key_ptr.* = key_copy;
+            result.value_ptr.* = std.ArrayList([]const u8){};
+        }
+        try result.value_ptr.append(self.allocator, val_copy);
+        return result.value_ptr.items.len;
+    }
+};

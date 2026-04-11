@@ -2,11 +2,13 @@ const std = @import("std");
 const net = std.net;
 const dispatcher = @import("../commands/dispatcher.zig");
 const Store = @import("../store/store.zig").Store;
+const List = @import("../store/store.zig").List;
 const writer = @import("../resp/writer.zig");
 
 pub const ConnArgs = struct {
     conn: net.Server.Connection,
     store: *Store,
+    list: *List,
 };
 
 pub fn handle(args: ConnArgs) void {
@@ -18,7 +20,7 @@ pub fn handle(args: ConnArgs) void {
     while (true) {
         const n = args.conn.stream.read(&buf) catch break;
         if (n == 0) break;
-        const response = dispatcher.dispatch(buf[0..n], &resp_buf, args.store) orelse writer.err_parse;
+        const response = dispatcher.dispatch(buf[0..n], &resp_buf, args.store, args.list) orelse writer.err_parse;
         args.conn.stream.writeAll(response) catch break;
     }
 }
