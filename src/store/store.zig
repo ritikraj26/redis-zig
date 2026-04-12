@@ -73,8 +73,9 @@ pub const List = struct {
         self.map.deinit();
     }
 
-    pub fn rpush(self: *List, key: []const u8, val: []const u8) !usize {
-        const val_copy = try self.allocator.dupe(u8, val);
+    // use []const []const u8 when the storage does't need to grw, read only
+    // use std.ArrayList when the storage needs to grow
+    pub fn rpush(self: *List, key: []const u8, vals: []const []const u8) !usize {
         self.mutex.lock();
         defer self.mutex.unlock();
         const result = try self.map.getOrPut(key);
@@ -83,7 +84,11 @@ pub const List = struct {
             result.key_ptr.* = key_copy;
             result.value_ptr.* = std.ArrayList([]const u8){};
         }
-        try result.value_ptr.append(self.allocator, val_copy);
+        for (vals) |val| {
+            const val_copy = try self.allocator.dupe(u8, val);
+            try result.value_ptr.append(self.allocator, val_copy);
+        }
+        // try result.value_ptr.append(self.allocator, val_copy);
         return result.value_ptr.items.len;
     }
 };
