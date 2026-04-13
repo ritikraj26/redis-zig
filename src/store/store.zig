@@ -91,4 +91,33 @@ pub const List = struct {
         // try result.value_ptr.append(self.allocator, val_copy);
         return result.value_ptr.items.len;
     }
+
+    pub fn lpush(self: *List, key: []const u8, vals: []const []const u8) !usize {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        const result = try self.map.getOrPut(key);
+        if (!result.found_existing) {
+            const key_copy = try self.allocator.dupe(u8, key);
+            result.key_ptr.* = key_copy;
+            result.value_ptr.* = std.ArrayList([]const u8){};
+        }
+        // insert each val at front left-to-right: LPUSH key a b → [b, a, ...]
+        for (vals) |val| {
+            const val_copy = try self.allocator.dupe(u8, val);
+            try result.value_ptr.insert(self.allocator, 0, val_copy);
+        }
+
+        return result.value_ptr.items.len;
+    }
+
+    pub fn lrange(self: *List, key: []const u8, start: i64, end: i64) ?[]const []const u8 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        const items = if (self.map.get(key)) |l| l.items else return null;
+        const len = @as(i64, @intCast(items.len));
+        const s = if (start < 0) @max(len + start, 0) else @min(start, len);
+        const e = if (end < 0) len + end + 1 else @min(end + 1, len);
+        if (s >= e) return &[_][]const u8{};
+        return items[@intCast(s)..@intCast(e)];
+    }
 };

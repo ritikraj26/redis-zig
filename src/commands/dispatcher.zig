@@ -8,6 +8,7 @@ const echo = @import("echo.zig");
 const set = @import("set.zig");
 const get = @import("get.zig");
 const rpush = @import("rpush.zig");
+const lpush = @import("lpush.zig");
 const lrange = @import("lrange.zig");
 
 pub fn dispatch(data: []const u8, out: []u8, store: *Store, list: *List) ?[]const u8 {
@@ -23,6 +24,8 @@ pub fn dispatch(data: []const u8, out: []u8, store: *Store, list: *List) ?[]cons
         return get.handle(cmd, out, store);
     } else if (std.ascii.eqlIgnoreCase(cmd.name, "rpush")) {
         return rpush.handle(cmd, out, store, list);
+    } else if (std.ascii.eqlIgnoreCase(cmd.name, "lpush")) {
+        return lpush.handle(cmd, out, store, list);
     } else if (std.ascii.eqlIgnoreCase(cmd.name, "lrange")) {
         return lrange.handle(cmd, out, store, list);
     }
