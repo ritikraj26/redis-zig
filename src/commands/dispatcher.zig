@@ -11,6 +11,7 @@ const rpush = @import("rpush.zig");
 const lpush = @import("lpush.zig");
 const lrange = @import("lrange.zig");
 const llen = @import("llen.zig");
+const lpop = @import("lpop.zig");
 
 pub fn dispatch(data: []const u8, out: []u8, store: *Store, list: *List) ?[]const u8 {
     const cmd = parser.parse(data) orelse return null;
@@ -31,6 +32,8 @@ pub fn dispatch(data: []const u8, out: []u8, store: *Store, list: *List) ?[]cons
         return lrange.handle(cmd, out, store, list);
     } else if (std.ascii.eqlIgnoreCase(cmd.name, "llen")) {
         return llen.handle(cmd, out, store, list);
+    } else if (std.ascii.eqlIgnoreCase(cmd.name, "lpop")) {
+        return lpop.handle(cmd, out, store, list);
     }
 
     return writer.err_unknown;

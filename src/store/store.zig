@@ -127,4 +127,13 @@ pub const List = struct {
         const items = if (self.map.get(key)) |l| l.items else return 0;
         return items.len;
     }
+
+    pub fn lpop(self: *List, key: []const u8) ?[]const u8 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const list_ptr = self.map.getPtr(key) orelse return null;
+        if (list_ptr.items.len == 0) return null;
+        return list_ptr.orderedRemove(0);
+    }
 };
