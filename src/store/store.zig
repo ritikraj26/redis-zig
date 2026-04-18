@@ -52,14 +52,22 @@ pub const Store = struct {
     }
 };
 
+pub const Waiter = struct {
+    cond: std.Thread.Condition = .{},
+    resolved_key: []const u8 = undefined,
+    result: ?[]const u8 = null,
+};
+
 pub const List = struct {
     map: std.StringHashMap(std.ArrayList([]const u8)),
+    waiters: std.StringHashMap(std.ArrayList(*Waiter)),
     mutex: std.Thread.Mutex,
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator) List {
         return .{
             .map = std.StringHashMap(std.ArrayList([]const u8)).init(allocator),
+            .waiters = std.StringHashMap(std.ArrayList(*Waiter)).init(allocator),
             .mutex = .{},
             .allocator = allocator,
         };
@@ -71,6 +79,11 @@ pub const List = struct {
             entry.value_ptr.deinit(self.allocator);
         }
         self.map.deinit();
+        var wit = self.waiters.iterator();
+        while (wit.next()) |entry| {
+            entry.value_ptr.deinit(self.allocator);
+        }
+        self.waiters.deinit();
     }
 
     // use []const []const u8 when the storage does't need to grw, read only
@@ -89,7 +102,9 @@ pub const List = struct {
             try result.value_ptr.append(self.allocator, val_copy);
         }
         // try result.value_ptr.append(self.allocator, val_copy);
-        return result.value_ptr.items.len;
+        const len = result.value_ptr.items.len;
+        self.resolveWaiters(key);
+        return len;
     }
 
     pub fn lpush(self: *List, key: []const u8, vals: []const []const u8) !usize {
@@ -107,7 +122,9 @@ pub const List = struct {
             try result.value_ptr.insert(self.allocator, 0, val_copy);
         }
 
-        return result.value_ptr.items.len;
+        const len = result.value_ptr.items.len;
+        self.resolveWaiters(key);
+        return len;
     }
 
     pub fn lrange(self: *List, key: []const u8, start: i64, end: i64) ?[]const []const u8 {
@@ -135,6 +152,79 @@ pub const List = struct {
         const list_ptr = self.map.getPtr(key) orelse return null;
         if (list_ptr.items.len == 0) return null;
         return list_ptr.orderedRemove(0);
+    }
+
+    // Called while self.mutex is held. Wakes the first waiter for `key` if
+    // the list has an element available.
+    fn resolveWaiters(self: *List, key: []const u8) void {
+        const entry = self.waiters.getEntry(key) orelse return;
+        const stored_key = entry.key_ptr.*;
+        const waiter_list = entry.value_ptr;
+        while (waiter_list.items.len > 0) {
+            const list_ptr = self.map.getPtr(key) orelse return;
+            if (list_ptr.items.len == 0) return;
+            const w = waiter_list.orderedRemove(0);
+            const val = list_ptr.orderedRemove(0);
+            w.result = val;
+            w.resolved_key = stored_key;
+            w.cond.signal();
+        }
+    }
+
+    pub fn blpop(self: *List, keys: []const []const u8, timeout_ms: u64) ?[2][]const u8 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        // Fast path: check if any key already has elements.
+        for (keys) |key| {
+            const list_ptr = self.map.getPtr(key) orelse continue;
+            if (list_ptr.items.len > 0) {
+                const val = list_ptr.orderedRemove(0);
+                return .{ key, val };
+            }
+        }
+
+        // Register waiter on all requested keys.
+        var waiter = Waiter{};
+        for (keys) |key| {
+            const res = self.waiters.getOrPut(key) catch continue;
+            if (!res.found_existing) {
+                const key_copy = self.allocator.dupe(u8, key) catch continue;
+                res.key_ptr.* = key_copy;
+                res.value_ptr.* = std.ArrayList(*Waiter){};
+            }
+            res.value_ptr.append(self.allocator, &waiter) catch {};
+        }
+
+        // Block until an element arrives or timeout expires.
+        if (timeout_ms == 0) {
+            while (waiter.result == null) {
+                waiter.cond.wait(&self.mutex);
+            }
+        } else {
+            const deadline = std.time.nanoTimestamp() +
+                @as(i128, @intCast(timeout_ms)) * std.time.ns_per_ms;
+            while (waiter.result == null) {
+                const now = std.time.nanoTimestamp();
+                if (now >= deadline) break;
+                const remaining: u64 = @intCast(deadline - now);
+                waiter.cond.timedWait(&self.mutex, remaining) catch break;
+            }
+        }
+
+        // Remove waiter from all keys (handles both resolved and timed-out cases).
+        for (keys) |key| {
+            const wl = self.waiters.getPtr(key) orelse continue;
+            for (wl.items, 0..) |w, i| {
+                if (w == &waiter) {
+                    _ = wl.orderedRemove(i);
+                    break;
+                }
+            }
+        }
+
+        if (waiter.result) |val| return .{ waiter.resolved_key, val };
+        return null;
     }
 
     /// Pops up to `buf.len` elements from the front of the list into `buf`.
