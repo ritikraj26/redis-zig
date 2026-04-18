@@ -136,4 +136,18 @@ pub const List = struct {
         if (list_ptr.items.len == 0) return null;
         return list_ptr.orderedRemove(0);
     }
+
+    /// Pops up to `buf.len` elements from the front of the list into `buf`.
+    /// Returns the number of elements actually popped.
+    pub fn lpopN(self: *List, key: []const u8, buf: [][]const u8) usize {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const list_ptr = self.map.getPtr(key) orelse return 0;
+        const n = @min(buf.len, list_ptr.items.len);
+        for (0..n) |i| {
+            buf[i] = list_ptr.orderedRemove(0);
+        }
+        return n;
+    }
 };
