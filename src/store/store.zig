@@ -120,4 +120,11 @@ pub const List = struct {
         if (s >= e) return &[_][]const u8{};
         return items[@intCast(s)..@intCast(e)];
     }
+
+    pub fn llen(self: *List, key: []const u8) usize {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        const items = if (self.map.get(key)) |l| l.items else return 0;
+        return items.len;
+    }
 };
