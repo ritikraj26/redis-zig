@@ -35,6 +35,13 @@ pub const Store = struct {
         return entry.value;
     }
 
+    pub fn hasKey(self: *Store, key: []const u8) bool {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        const entry = self.map.get(key) orelse return false;
+        return !entry.isExpired();
+    }
+
     pub fn set(self: *Store, key: []const u8, val: []const u8) !void {
         try self.setWithTTL(key, val, null);
     }
@@ -143,6 +150,12 @@ pub const List = struct {
         defer self.mutex.unlock();
         const items = if (self.map.get(key)) |l| l.items else return 0;
         return items.len;
+    }
+
+    pub fn hasKey(self: *List, key: []const u8) bool {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        return self.map.contains(key);
     }
 
     pub fn lpop(self: *List, key: []const u8) ?[]const u8 {

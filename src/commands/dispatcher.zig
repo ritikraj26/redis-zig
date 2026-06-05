@@ -9,6 +9,7 @@ const set = @import("set.zig");
 const get = @import("get.zig");
 const rpush = @import("rpush.zig");
 const lpush = @import("lpush.zig");
+const type_cmd = @import("type.zig");
 const lrange = @import("lrange.zig");
 const llen = @import("llen.zig");
 const lpop = @import("lpop.zig");
@@ -37,6 +38,8 @@ pub fn dispatch(data: []const u8, out: []u8, store: *Store, list: *List) ?[]cons
         return lpop.handle(cmd, out, store, list);
     } else if (std.ascii.eqlIgnoreCase(cmd.name, "blpop")) {
         return blpop.handle(cmd, out, store, list);
+    } else if (std.ascii.eqlIgnoreCase(cmd.name, "type")) {
+        return type_cmd.handle(cmd, out, store, list);
     }
 
     return writer.err_unknown;
